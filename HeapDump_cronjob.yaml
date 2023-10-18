@@ -1,0 +1,23 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: shuttle-heapdump-cronjob
+spec:
+  schedule: "5 0 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          volumes:
+          - name: script-configmap
+            configMap:
+              name: script-configmap
+          containers:
+          - name: sanes-shuttlepython-dev
+            image: registry.global.ccc.srvb.bo.paas.cloudcenter.corp/shuttle-san/python:3.11.1
+            volumeMounts:
+            - name: script-configmap
+              mountPath: /app/delete_old.py
+              subPath: delete_old.py
+            command: ["python3", "/app/delete_old.py"]
+          restartPolicy: OnFailure
