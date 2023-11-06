@@ -1,7 +1,8 @@
 import os, time
 
 directory = "/app/downloads"
-days = 7
+# Age in days of the files to be deleted.
+days = 1
 now = time.time()
 deleted_files = []
 for root, dirs, files in os.walk(directory):

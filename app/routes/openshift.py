@@ -1,5 +1,8 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, validator
+from app.functions.utils import get_microservices
+from functions.utils import get_podnames, get_microservices
+from functions.utils import get_namespaces
 from functions.heapdump import getHeapdump
 
 pod_exec = APIRouter(tags=["v1"])
@@ -29,3 +32,20 @@ class heapDumpModel(BaseModel):
 @pod_exec.post("/heapdump")
 async def execute_heapdump(target: heapDumpModel):
     return await getHeapdump(functionalEnvironment=target.functionalEnvironment, cluster=target.cluster, region=target.region, namespace=target.namespace, pod=target.pod, action=target.action)
+
+class namespace_list(BaseModel):
+    functionalEnvironment: str
+    cluster: str
+    region: str
+
+@pod_exec.post("/namespace_list")
+async def get_namespace_list(target: namespace_list):
+    return await get_namespaces(functionalEnvironment=target.functionalEnvironment, cluster=target.cluster, region=target.region)
+
+@pod_exec.post("/microservices_list")
+async def get_microservice_list(target: namespace_list):
+    return await get_microservices(functionalEnvironment=target.functionalEnvironment, cluster=target.cluster, region=target.region)
+
+@pod_exec.post("/pod_list")
+async def get_pod_list(target: namespace_list):
+    return await get_podnames(functionalEnvironment=target.functionalEnvironment, cluster=target.cluster, region=target.region)

@@ -1,21 +1,13 @@
 from shuttlelib.openshift.client import OpenshiftClient
-import urllib3, ssl, urllib
 from urllib3.exceptions import InsecureRequestWarning
-import websocket, subprocess
 from fastapi.responses import FileResponse
-from functions.utils import renaming_placing, identify_pid, clean_old_files
+from functions.utils import rename_and_move_files, identify_pid, websocket_connection
+import urllib3, urllib.parse
+import subprocess
 
 urllib3.disable_warnings(InsecureRequestWarning)
 
 async def generate_heapdump(url, token, namespace, pod, action):
-    headers = {
-        "Authorization": "Bearer " + token,
-        "Connection": "upgrade",
-        "Upgrade": "SPDY/4.8",
-        "X-Stream-Protocol-Version": "channel.k8s.io",
-        "charset": "utf-8"
-    }
-
     # Heapdump generation and compression
     dump_command = f"jmap -dump:format=b,file=heapdumpPRO 1; gzip heapdumpPRO"
     dump_command_encoded = urllib.parse.quote(dump_command, safe='')
@@ -25,14 +17,7 @@ async def generate_heapdump(url, token, namespace, pod, action):
     request_url += f'command=/bin/bash&command=-c&command={dump_command_encoded}'
     request_url += '&stdin=true&stderr=true&stdout=true&tty=false'
 
-    data = []
-
-    ws_destino = websocket.WebSocket(sslopt={"cert_reqs": ssl.CERT_NONE})
-    ws_destino.connect(request_url.replace("https", "wss"), header=headers)
-    while ws_destino.connected != False:
-        recv = ws_destino.recv()
-        if recv != '':
-            data.append(recv.decode("utf-8"))
+    ws_connect, data = await websocket_connection(token, request_url)
 
     login_command = ["oc", "login", "--token=" + token, "--server=" + url, "--namespace=" + namespace, "--insecure-skip-tls-verify=true"]
     login_process = subprocess.Popen(login_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -51,7 +36,7 @@ async def generate_heapdump(url, token, namespace, pod, action):
                 print("RSYNC command completed successfully")
                 # Rename the generic pod´s name and move it to downloads´s folder.
                 original_file= "heapdumpPRO.gz"
-                new_file = await renaming_placing(namespace, pod, original_file, action)
+                new_file = await rename_and_move_files(namespace, pod, original_file, action)
 
                 return FileResponse(f"/app/downloads/{namespace}/{new_file}", media_type="application/octet-stream", filename = new_file)
             else:
@@ -60,19 +45,10 @@ async def generate_heapdump(url, token, namespace, pod, action):
         except subprocess.CalledProcessError as e:
             print(e.output)
     #Close websocket    
-    ws_destino.close()
-
+    ws_connect.close()
     return data
 
 async def generate_threaddump(url, token, namespace, pod, action):
-    headers = {
-        "Authorization": "Bearer " + token,
-        "Connection": "upgrade",
-        "Upgrade": "SPDY/4.8",
-        "X-Stream-Protocol-Version": "channel.k8s.io",
-        "charset": "utf-8"
-    }
-
     # ThreadDump generation and compression for a pod.
     dump_command = f"threaddump.d/0.start_threaddump.sh > DUMP-1; sleep 3; threaddump.d/0.start_threaddump.sh > DUMP-2; sleep 5; threaddump.d/0.start_threaddump.sh > DUMP-3; tar -czvf ThreadDump.gz DUMP-1/ DUMP-2/ DUMP-3/"
     dump_command_encoded = urllib.parse.quote(dump_command, safe='')
@@ -82,14 +58,7 @@ async def generate_threaddump(url, token, namespace, pod, action):
     request_url += f'command=/bin/bash&command=-c&command={dump_command_encoded}'
     request_url += '&stdin=true&stderr=true&stdout=true&tty=false'
 
-    data = []
-
-    ws_destino = websocket.WebSocket(sslopt={"cert_reqs": ssl.CERT_NONE})
-    ws_destino.connect(request_url.replace("https", "wss"), header=headers)
-    while ws_destino.connected != False:
-        recv = ws_destino.recv()
-        if recv != '':
-            data.append(recv.decode("utf-8"))
+    ws_connect, data = await websocket_connection(token, request_url)
 
     login_command = ["oc", "login", "--token=" + token, "--server=" + url, "--namespace=" + namespace, "--insecure-skip-tls-verify=true"]
     login_process = subprocess.Popen(login_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -106,7 +75,7 @@ async def generate_threaddump(url, token, namespace, pod, action):
                 print("RSYNC command completed successfully")
                 # Rename the generic pod´s name and move it to downloads´s folder.
                 original_file= "ThreadDump.gz"
-                new_file = await renaming_placing(namespace, pod, original_file, action)
+                new_file = await rename_and_move_files(namespace, pod, original_file, action)
 
                 return FileResponse(f"/app/downloads/{namespace}/{new_file}", media_type="application/octet-stream", filename = new_file)
             else:
@@ -115,31 +84,15 @@ async def generate_threaddump(url, token, namespace, pod, action):
         except subprocess.CalledProcessError as e:
             print(e.output)
     #Close websocket    
-    ws_destino.close()
-
+    ws_connect.close()
     return data
 
 async def generate_heapdump_DG(url, token, namespace, pod, action):
-    headers = {
-        "Authorization": "Bearer " + token,
-        "Connection": "upgrade",
-        "Upgrade": "SPDY/4.8",
-        "X-Stream-Protocol-Version": "channel.k8s.io",
-        "charset": "utf-8"
-    }
-
     # Running the command on the target pod
     request_url = f'{url}/api/v1/namespaces/{namespace}/pods/{pod}/exec?'
     request_url += f'&stdin=true&stderr=true&stdout=true&tty=false'
 
-    data = []
-
-    ws_destino = websocket.WebSocket(sslopt={"cert_reqs": ssl.CERT_NONE})
-    ws_destino.connect(request_url.replace("https", "wss"), header=headers)
-    while ws_destino.connected != False:
-        recv = ws_destino.recv()
-        if recv != '':
-            data.append(recv.decode("utf-8"))
+    ws_connect, data = await websocket_connection(token, request_url)
 
     login_command = ["oc", "login", "--token=" + token, "--server=" + url, "--namespace=" + namespace, "--insecure-skip-tls-verify=true"]
     login_process = subprocess.Popen(login_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -165,7 +118,7 @@ async def generate_heapdump_DG(url, token, namespace, pod, action):
                     print("RSYNC command completed successfully")
                     # Rename the generic pod´s name and move it to downloads´s folder.
                     original_file= "jvm.hprof.gz"
-                    new_file = await renaming_placing(namespace, pod, original_file, action)
+                    new_file = await rename_and_move_files(namespace, pod, original_file, action)
                     
                     return FileResponse(f"/app/downloads/{namespace}/{new_file}", media_type="application/octet-stream", filename = new_file)
                 else:
@@ -176,32 +129,16 @@ async def generate_heapdump_DG(url, token, namespace, pod, action):
             print(e.output)
 
     #Close websocket    
-    ws_destino.close()
-
+    ws_connect.close()
     return data
 
 async def generate_threaddump_DG(url, token, namespace, pod, action):
-    headers = {
-        "Authorization": "Bearer " + token,
-        "Connection": "upgrade",
-        "Upgrade": "SPDY/4.8",
-        "X-Stream-Protocol-Version": "channel.k8s.io",
-        "charset": "utf-8"
-    }
-
     # Running the command on the target pod
     request_url = f'{url}/api/v1/namespaces/{namespace}/pods/{pod}/exec?'
     request_url += f'&stdin=true&stderr=true&stdout=true&tty=false'
 
-    data = []
-
-    ws_destino = websocket.WebSocket(sslopt={"cert_reqs": ssl.CERT_NONE})
-    ws_destino.connect(request_url.replace("https", "wss"), header=headers)
-    while ws_destino.connected != False:
-        recv = ws_destino.recv()
-        if recv != '':
-            data.append(recv.decode("utf-8"))
-
+    ws_connect, data = await websocket_connection(token, request_url)
+    
     login_command = ["oc", "login", "--token=" + token, "--server=" + url, "--namespace=" + namespace, "--insecure-skip-tls-verify=true"]
     login_process = subprocess.Popen(login_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     print(f"Voy a intentar logarme en {url}, en el namespace {namespace}.")
@@ -224,7 +161,7 @@ async def generate_threaddump_DG(url, token, namespace, pod, action):
                     print("RSYNC command completed successfully")
                     # Rename the generic pod´s name and move it to downloads´s folder.
                     original_file= "jstack.out.gz"
-                    new_file = await renaming_placing(namespace, pod, original_file, action)
+                    new_file = await rename_and_move_files(namespace, pod, original_file, action)
 
                     return FileResponse(f"/app/downloads/{namespace}/{new_file}", media_type="application/octet-stream", filename = new_file)
                 else:
@@ -234,8 +171,7 @@ async def generate_threaddump_DG(url, token, namespace, pod, action):
         except subprocess.CalledProcessError as e:
             print(e.output)
     #Close websocket    
-    ws_destino.close()
-
+    ws_connect.close()
     return data
 
 async def getHeapdump (functionalEnvironment, cluster , region, namespace, pod, action):
@@ -249,8 +185,6 @@ async def getHeapdump (functionalEnvironment, cluster , region, namespace, pod, 
         print(f'Y para eso ya tengo instanciado el cliente y tengo la url: {url} y mi token {token}')
         print("#####################################################################")
         data_obtained = await generate_heapdump(url, token, namespace, pod[0], action)
-        #delete = await clean_old_files()
-        #print(f"Files deleted because they´re 7 days older: {delete}")
         return data_obtained
     elif action =="2":
         print("#####################################################################")
@@ -258,8 +192,6 @@ async def getHeapdump (functionalEnvironment, cluster , region, namespace, pod, 
         print(f'Y para eso ya tengo instanciado el cliente y tengo la url: {url} y mi token {token}')
         print("#####################################################################")
         data_obtained = await generate_threaddump(url, token, namespace, pod[0], action)
-        #delete = await clean_old_files()
-        #print(f"Files deleted because they´re 7 days older: {delete}")
         return data_obtained
     elif action =="3":
         print("#####################################################################")
@@ -267,8 +199,6 @@ async def getHeapdump (functionalEnvironment, cluster , region, namespace, pod, 
         print(f'Y para eso ya tengo instanciado el cliente y tengo la url: {url} y mi token {token}')
         print("#####################################################################")
         data_obtained = await generate_heapdump_DG(url, token, namespace, pod[0], action)
-        #delete = await clean_old_files()
-        #print(f"Files deleted because they´re 7 days older: {delete}")
         return data_obtained
     elif action =="4":
         print("#####################################################################")
@@ -276,8 +206,6 @@ async def getHeapdump (functionalEnvironment, cluster , region, namespace, pod, 
         print(f'Y para eso ya tengo instanciado el cliente y tengo la url: {url} y mi token {token}')
         print("#####################################################################")
         data_obtained = await generate_threaddump_DG(url, token, namespace, pod[0], action)
-        #delete = await clean_old_files()
-        #print(f"Files deleted because they´re 7 days older: {delete}")
         return data_obtained
     else:
         print("The 'ACTION' parameter has not been set or has a invalid value")

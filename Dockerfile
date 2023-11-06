@@ -26,10 +26,9 @@ RUN export GIT_SSL_NO_VERIFY="true" && \
     export no_proxy=.cloudcenter.corp && \
     apt-get update && \
     apt-get install -y curl && \
-    apt-get install -y rsync && \
-    rm -rf /var/lib/apt/lists/*
+    apt-get install -y rsync
 
-# Code for install the oc client.
+# Code for install oc client.
 RUN export GIT_SSL_NO_VERIFY="true" && \
     export http_proxy=http://proxyapp.cloudcenter.corp:8080 && \
     export https_proxy=http://proxyapp.cloudcenter.corp:8080 && \
@@ -51,8 +50,6 @@ RUN groupadd -g 1000060000 userpython && \
     mkdir -p /home/userpython && \
     mkdir -p /app/downloads && \
     chown -R userpython:userpython /app && \
-    chown -R userpython:userpython /run && \
-    chmod -R 775 /run && \
     chown -R userpython:userpython /home/userpython && \
     chmod +x delete_old.py
 
